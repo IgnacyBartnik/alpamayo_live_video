@@ -19,17 +19,21 @@
 
 import torch
 import numpy as np
+import time
 
 from alpamayo_r1.models.alpamayo_r1 import AlpamayoR1
 from alpamayo_r1.load_physical_aiavdataset import load_physical_aiavdataset
 from alpamayo_r1 import helper
 
+start = time.time()
 
 # Example clip ID
 clip_id = "030c760c-ae38-49aa-9ad8-f5650a545d26"
 print(f"Loading dataset for clip_id: {clip_id}...")
 data = load_physical_aiavdataset(clip_id, t0_us=5_100_000)
 print("Dataset loaded.")
+print(f"Data loading time: {time.time() - start:.2f} seconds")
+load_model_start = time.time()
 messages = helper.create_message(data["image_frames"].flatten(0, 1))
 
 model = AlpamayoR1.from_pretrained("nvidia/Alpamayo-R1-10B", dtype=torch.bfloat16).to("cuda")
@@ -51,6 +55,10 @@ model_inputs = {
 
 model_inputs = helper.to_device(model_inputs, "cuda")
 
+print(f"Model loaded in {time.time() - load_model_start:.2f} seconds.")
+print("Running inference...")
+intereference_start = time.time()
+
 torch.cuda.manual_seed_all(42)
 with torch.autocast("cuda", dtype=torch.bfloat16):
     pred_xyz, pred_rot, extra = model.sample_trajectories_from_data_with_vlm_rollout(
@@ -61,6 +69,8 @@ with torch.autocast("cuda", dtype=torch.bfloat16):
         max_generation_length=256,
         return_extra=True,
     )
+
+print(f"Inference completed in {time.time() - intereference_start:.2f} seconds.")
 
 # the size is [batch_size, num_traj_sets, num_traj_samples]
 print("Chain-of-Causation (per trajectory):\n", extra["cot"][0])
